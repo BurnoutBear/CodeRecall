@@ -31,6 +31,8 @@ func _ready():
 	
 	folder_path.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	folder_path.access = FileDialog.ACCESS_FILESYSTEM
+	folder_path.title = "Select your projects folder"
+	folder_path.ok_button_text = "Confirm"
 	folder_path.dir_selected.connect(on_directory_selected)
 
 func on_dir_pressed():

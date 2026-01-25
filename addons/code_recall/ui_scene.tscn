@@ -59,10 +59,6 @@ icon_alignment = 1
 
 [node name="FolderPath" type="FileDialog" parent="VBoxContainer"]
 oversampling_override = 1.0
-title = "Select your projects folder"
-ok_button_text = "Choose Folder"
-file_mode = 2
-access = 2
 hidden_files_toggle_enabled = false
 file_filter_toggle_enabled = false
 file_sort_options_enabled = false
