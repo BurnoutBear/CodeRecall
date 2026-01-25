@@ -39,7 +39,6 @@ visible = false
 custom_minimum_size = Vector2(0, 39)
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Search is not available yet"
 placeholder_text = "Search code"
 clear_button_enabled = true
 right_icon = SubResource("DPITexture_qvngo")
@@ -60,7 +59,7 @@ icon_alignment = 1
 
 [node name="FolderPath" type="FileDialog" parent="VBoxContainer"]
 oversampling_override = 1.0
-title = "Open a Directory"
+title = "Select your projects folder"
 ok_button_text = "Choose Folder"
 file_mode = 2
 access = 2

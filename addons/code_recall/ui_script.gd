@@ -17,9 +17,9 @@ signal collapse()
 func _ready():
 	button_dir.pressed.connect(on_dir_pressed)
 	
-	searchbar.text = "Search is not available yet"
 	searchbar.right_icon = get_theme_icon("Search", "EditorIcons")
-	#searchbar.text_submitted.connect(emit_search)
+	searchbar.text_changed.connect(check_text)
+	searchbar.text_submitted.connect(emit_search)
 	
 	button_dir_2.icon = get_theme_icon("Folder", "EditorIcons")
 	button_dir_2.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -43,6 +43,10 @@ func on_directory_selected(dir_path: String):
 	button_dir_2.visible = true
 	button_coll.visible = true
 	scroll_container.visible = true
+
+func check_text(text : String):
+	if text == "":
+		emit_search("")
 
 func emit_search(text : String):
 	search.emit(text)
