@@ -9,9 +9,12 @@ var ui : CodeRecallUI
 
 var folder_path : String
 var timer : Timer
+var func_mode : bool = true
 var flag : bool
 const height : float = 25.0
 const offset : float = 25.0
+const transparent : Color = Color(0.0, 0.0, 0.0, 0.0)
+var highlighter : Color = Color(0.506, 0.282, 0.729, 0.376)
 
 func _enable_plugin():
 	## UI SETUP
@@ -25,6 +28,7 @@ func _enable_plugin():
 	ui.directory.connect(dir_change)
 	ui.search.connect(search)
 	ui.collapse.connect(collapse_all)
+	ui.recolor.connect(recolor)
 	
 	timer = Timer.new()
 	self.add_child(timer)
@@ -38,6 +42,7 @@ func _disable_plugin():
 func dir_change(path : String):
 	remove_all()
 	get_projects(path)
+	ui.button_color.color = highlighter
 
 func get_projects(path : String):
 	var dir = DirAccess.open(path)
@@ -51,7 +56,8 @@ func get_projects(path : String):
 					## CREATE PROJECT FOLDABLE
 					var fc : FoldableContainer = FoldableContainer.new()
 					ui.code_container.add_child(fc)
-					fc.title = "[ P ] " + file_name
+					fc.title = "[  " + file_name + "  ]"
+					fc.title_alignment = HORIZONTAL_ALIGNMENT_CENTER
 					var vb : VBoxContainer = VBoxContainer.new()
 					fc.add_child(vb)
 					vb.SIZE_EXPAND_FILL
@@ -72,17 +78,21 @@ func get_scripts(path : String, parent : Control):
 			if dir.current_is_dir():
 				if file_name != "." and file_name != ".." and file_name != "addons":
 					get_scripts(full_path, parent)
-			elif file_name.ends_with(".gd"):
+			elif file_name.ends_with(".gd") or file_name.ends_with(".cs"):
 				## CREATE SCRIPT FOLDABLE
 				var fc : FoldableContainer = FoldableContainer.new()
 				parent.add_child(fc)
-				fc.title = "[ S ] " + file_name
+				fc.title = file_name
+				fc.title_alignment = HORIZONTAL_ALIGNMENT_CENTER
 				var vb : VBoxContainer = VBoxContainer.new()
 				fc.add_child(vb)
 				vb.SIZE_EXPAND_FILL
 				fc.fold()
-				get_funcs(full_path, vb)
-				if vb.get_child_count() < 1: # Remove scripts with 0 funcs
+				if func_mode:
+					get_funcs(full_path, vb)
+				else:
+					get_code(full_path, vb)
+				if vb.get_child_count() < 1: # Remove empty scripts
 					fc.queue_free()
 			file_name = dir.get_next()
 		dir.list_dir_end()
@@ -90,7 +100,7 @@ func get_scripts(path : String, parent : Control):
 func get_funcs(file_path : String, parent : Control):
 	var file = FileAccess.open(file_path, FileAccess.READ)
 	if not file:
-		print("Error while opening file: ", file_path)
+		printerr("Error while opening file: ", file_path)
 		return
 	
 	var content = file.get_as_text()
@@ -105,8 +115,8 @@ func get_funcs(file_path : String, parent : Control):
 		var trimmed : String = line.strip_edges()
 		if trimmed.begins_with("func "):
 			if flag: # Necessary to spot funcs with no space between
-				if tf.text.get_slice_count("\n") > 1:
-					tf.custom_minimum_size.y = offset + height * tf.text.get_slice_count("\n")
+				if tf.get_line_count() > 1:
+					tf.custom_minimum_size.y = offset + height * tf.get_line_count()
 					fc.fold()
 				else:
 					fc.queue_free()
@@ -125,47 +135,69 @@ func get_funcs(file_path : String, parent : Control):
 				## CREATE CODE AREA
 				tf = TextEdit.new()
 				vb.add_child(tf)
+				tf.tooltip_text = "Click to copy function\nShift+Click to copy script"
+				tf.get_parent().tooltip_text = content
+				tf.highlight_all_occurrences = true
 				tf.text = trimmed
 				flag = true
 				tf.editable = false
 				tf.gui_input.connect(copy_text.bind(tf))
-		elif flag:
-			if line.begins_with("\t"):
-				if line.begins_with("\tpass"):
+		elif flag: # If we find a func, we insert the following lines into the TextEdit
+			if line.begins_with("\t"): # Part of the func
+				if line.begins_with("\tpass"): # A pass with 1 tabspace means empty func
 					flag = false
 					fc.queue_free()
 				else:
 					tf.text += "\n" + line
-			else:
+			else: # Not part of the func
 				if tf.text.get_slice_count("\n") > 1:
-					tf.custom_minimum_size.y = offset + height * tf.text.get_slice_count("\n")
+					tf.custom_minimum_size.y = offset + height * tf.get_line_count()
 					fc.fold()
-				else:
+				else: # Empty func (really unlikely)
 					fc.queue_free()
 				flag = false
+
+func get_code(file_path : String, parent : Control):
+	var file = FileAccess.open(file_path, FileAccess.READ)
+	if not file:
+		printerr("Error while opening file: ", file_path)
+		return
+	
+	var tf : TextEdit = TextEdit.new()
+	tf.text = file.get_as_text()
+	file.close()
+	tf.custom_minimum_size.y = offset + height * tf.get_line_count()
+	parent.add_child(tf)
+	tf.tooltip_text = "Left-click copy all"
+	tf.get_parent().tooltip_text = tf.text # Redundant but consistent
+	tf.highlight_all_occurrences = true
+	tf.editable = false
+	tf.gui_input.connect(copy_text.bind(tf))
 
 func copy_text(event : InputEvent, tf : TextEdit):
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				if tf.text[0] == "f":
-					flag = true
-					timer.start(0.2)
-					await timer.timeout
-					flag = false
+			if Input.is_key_pressed(KEY_SHIFT) and event.pressed:
+				DisplayServer.clipboard_set(tf.get_parent().tooltip_text)
 			else:
-				if flag and tf.text[0] == "f":
-					if timer.time_left > 0.0:
-						timer.stop()
-						timer.timeout.emit()
-					DisplayServer.clipboard_set(tf.text)
-					print("Copied to clipboard!")
-					var tmp : String = tf.text
-					tf.text = tf.text.to_upper()
-					await get_tree().create_timer(0.2).timeout
-					tf.text = tmp
+				if event.pressed:
+					if tf.text[0] == "f":
+						flag = true
+						timer.start(0.2)
+						await timer.timeout
+						flag = false
+				else:
+					if flag and tf.text[0] == "f":
+						if timer.time_left > 0.0:
+							timer.stop()
+							timer.timeout.emit()
+						DisplayServer.clipboard_set(tf.text)
+						tf.select_all()
+						await get_tree().create_timer(0.2).timeout
+						tf.deselect()
 
 func search(text : String):
+	# Reset search by default, unhighlighting is done in show_all()
 	show_all()
 	collapse_all()
 	if text != "":
@@ -185,8 +217,33 @@ func search_code(node : Control, text : String):
 				# Expand Code Foldable
 				child.get_parent().get_parent().visible = true
 				child.get_parent().get_parent().expand()
+				# Highlight Text
+				highlight_code(child, text)
 		else:
 			search_code(child, text)
+
+func highlight_code(tf : TextEdit, text : String = ""):
+	# Default case is unhighlighting
+	if text == "":
+		for l in tf.get_line_count():
+			tf.set_line_background_color(l, transparent)
+		return
+	# Text highlighting
+	var pos : int = 0
+	var pos_new : int = 0
+	var line : int = 0
+	while true:
+		pos_new = tf.text.substr(pos).findn(text)
+		if pos_new == -1:
+			return
+		pos += pos_new
+		line = tf.text.substr(0, pos).count("\n")
+		tf.set_line_background_color(line, highlighter)
+		pos += text.length()
+
+func recolor():
+	highlighter = ui.button_color.color
+	search_code(ui.code_container, ui.searchbar.text)
 
 func remove_all(node : Control = ui.code_container):
 	for child in node.get_children():
@@ -216,3 +273,6 @@ func show_all(node : Control = ui.code_container):
 		show_all(child)
 		if child is FoldableContainer:
 			child.visible = true
+		elif child is TextEdit:
+			# Search Unhighlighting
+			highlight_code(child)
